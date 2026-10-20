@@ -1,0 +1,17 @@
+NAME=ALT
+VERSION=11.2
+ID=altlinux
+VERSION_ID=11.2
+VERSION_CODENAME=prometheus
+PRETTY_NAME="ALT Workstation 11.2 (Prometheus)"
+ANSI_COLOR="1;33"
+CPE_NAME="cpe:/o:alt:workstation:11.2"
+BUILD_ID="Workstation 11.2"
+HOME_URL="https://basealt.ru/"
+BUG_REPORT_URL="https://bugs.altlinux.org/"
+DOCUMENTATION_URL="https://docs.altlinux.org/"
+SUPPORT_URL="https://support.basealt.ru/"
+VARIANT="Workstation"
+VARIANT_ID=workstation
+LOGO=alt-distro-logo
+ALT_BRANCH_ID=p11

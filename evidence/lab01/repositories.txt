@@ -1,0 +1,4 @@
+rpm [p11] http://ftp.altlinux.org/pub/distributions/ALTLinux p11/branch/x86_64 classic
+rpm [p11] http://ftp.altlinux.org/pub/distributions/ALTLinux p11/branch/x86_64-i586 classic
+rpm [p11] http://ftp.altlinux.org/pub/distributions/ALTLinux p11/branch/noarch classic
+Дата проверки: 16.09.2026

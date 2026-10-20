@@ -1,0 +1,4 @@
+ok  	example.org/auguard/cmd/au-guard	0.011s
+ok  	example.org/auguard/internal/config	0.008s
+ok  	example.org/auguard/internal/events	0.008s
+ok  	example.org/auguard/internal/pipeline	0.007s

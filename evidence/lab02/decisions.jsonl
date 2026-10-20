@@ -1,0 +1,2 @@
+{"event_id":"demo_1","action":"observe","reason":"low_severity"}
+{"event_id":"demo_2","action":"review","reason":"high_severity"}

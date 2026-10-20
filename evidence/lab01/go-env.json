@@ -1,0 +1,12 @@
+{
+	"CGO_ENABLED": "1",
+	"GOAMD64": "v1",
+	"GOARCH": "amd64",
+	"GOCACHE": "/home/baranov/.cache/go-build",
+	"GOMOD": "/home/baranov/go-course/lab01/go.mod",
+	"GOMODCACHE": "/home/baranov/go/pkg/mod",
+	"GOOS": "linux",
+	"GOPATH": "/home/baranov/go",
+	"GOROOT": "/usr/lib/golang",
+	"GOTOOLCHAIN": "local"
+}

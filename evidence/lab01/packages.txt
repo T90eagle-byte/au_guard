@@ -1,0 +1,4 @@
+golang-1.26.7-alt1.x86_64
+git-core-2.50.1-alt1.x86_64
+gcc-13-alt1.x86_64
+glibc-devel-2.38.0.223.f053ff-alt1.p11.1.x86_64
