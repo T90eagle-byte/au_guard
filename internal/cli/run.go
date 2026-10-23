@@ -58,6 +58,7 @@ func Run(
 	workers := fs.Int("workers", cfg.Workers, "workers")
 	queue := fs.Int("queue", cfg.Queue, "queue size")
 	maxEvents := fs.Int("max-events", cfg.MaxEvents, "event limit")
+	timeout := fs.Duration("timeout", cfg.Timeout, "command timeout")
 
 	if err := fs.Parse(args[1:]); err != nil {
 		fmt.Fprintln(errOut, "argument_error: invalid flag")
@@ -72,12 +73,15 @@ func Run(
 	cfg.Workers = *workers
 	cfg.Queue = *queue
 	cfg.MaxEvents = *maxEvents
+	cfg.Timeout = *timeout
 
 	if err := cfg.Validate(); err != nil {
 		fmt.Fprintln(errOut, "argument_error: invalid configuration")
 		return 2
 	}
 
+	commandCtx, cancel := context.WithTimeout(ctx, cfg.Timeout)
+	defer cancel()
 	var reader io.Reader = in
 
 	if *inputPath != "-" {
@@ -100,9 +104,12 @@ func Run(
 	encoder := json.NewEncoder(out)
 
 	for {
-		event, err := source.Next(ctx)
+		event, err := source.Next(commandCtx)
 
 		if errors.Is(err, io.EOF) {
+			if ctxErr := commandCtx.Err(); ctxErr != nil {
+				return reportError(ctxErr, errOut)
+			}
 			return 0
 		}
 
@@ -110,7 +117,7 @@ func Run(
 			return reportError(err, errOut)
 		}
 
-		decision, err := handler.Handle(ctx, event)
+		decision, err := handler.Handle(commandCtx, event)
 		if err != nil {
 			return reportError(err, errOut)
 		}

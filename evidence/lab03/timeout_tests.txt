@@ -1,0 +1,14 @@
+=== RUN   TestCLITimeoutFlag
+=== RUN   TestCLITimeoutFlag/zero
+=== RUN   TestCLITimeoutFlag/negative
+=== RUN   TestCLITimeoutFlag/invalid
+=== RUN   TestCLITimeoutFlag/valid_5s
+--- PASS: TestCLITimeoutFlag (0.00s)
+    --- PASS: TestCLITimeoutFlag/zero (0.00s)
+    --- PASS: TestCLITimeoutFlag/negative (0.00s)
+    --- PASS: TestCLITimeoutFlag/invalid (0.00s)
+    --- PASS: TestCLITimeoutFlag/valid_5s (0.00s)
+=== RUN   TestCLITimeoutDeadline
+--- PASS: TestCLITimeoutDeadline (0.20s)
+PASS
+ok  	example.org/auguard/internal/cli	0.207s

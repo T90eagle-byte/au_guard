@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -363,4 +364,129 @@ func TestCLIContextExitCodes(t *testing.T) {
 			t.Fatalf("unexpected stderr: %q", errOut)
 		}
 	})
+}
+
+func TestCLITimeoutFlag(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+
+	if err := os.WriteFile(
+		path, []byte(eventOne+"\n"), 0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name  string
+		value string
+	}{
+		{"zero", "0s"},
+		{"negative", "-1s"},
+		{"invalid", "abc"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, out, errOut := runCLI(
+				context.Background(),
+				[]string{
+					"ingest", "--input", path,
+					"--timeout", tt.value,
+				},
+				"",
+			)
+
+			if code != 2 {
+				t.Fatalf("exit code = %d, want 2", code)
+			}
+			if out != "" {
+				t.Fatalf("unexpected stdout: %q", out)
+			}
+			if !strings.Contains(errOut, "argument_error") {
+				t.Fatalf("unexpected stderr: %q", errOut)
+			}
+
+			assertFileClosed(t, path)
+		})
+	}
+
+	t.Run("valid_5s", func(t *testing.T) {
+		code, out, errOut := runCLI(
+			context.Background(),
+			[]string{
+				"ingest", "--input", path,
+				"--timeout", "5s",
+			},
+			"",
+		)
+
+		if code != 0 || out != decisionOne || errOut != "" {
+			t.Fatalf(
+				"code=%d stdout=%q stderr=%q",
+				code, out, errOut,
+			)
+		}
+
+		assertFileClosed(t, path)
+	})
+}
+
+func assertFileClosed(t *testing.T, target string) {
+	t.Helper()
+
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatalf("cannot inspect file descriptors: %v", err)
+	}
+
+	for _, entry := range entries {
+		fdPath := filepath.Join("/proc/self/fd", entry.Name())
+		opened, err := os.Readlink(fdPath)
+		if err != nil {
+			continue
+		}
+
+		if opened == target {
+			t.Fatalf("file descriptor leak: %s", target)
+		}
+	}
+}
+
+type slowReader struct {
+	input   *strings.Reader
+	delayed bool
+}
+
+func (r *slowReader) Read(p []byte) (int, error) {
+	if !r.delayed {
+		r.delayed = true
+		time.Sleep(200 * time.Millisecond)
+	}
+	return r.input.Read(p)
+}
+
+func TestCLITimeoutDeadline(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	reader := &slowReader{
+		input: strings.NewReader(eventOne + "\n"),
+	}
+
+	code := cli.Run(
+		context.Background(),
+		[]string{"ingest", "--timeout", "100ms"},
+		reader,
+		&stdout,
+		&stderr,
+	)
+
+	if code != 5 {
+		t.Fatalf("exit code = %d, want 5", code)
+	}
+	if stdout.Len() != 0 {
+		t.Fatalf("unexpected stdout: %q", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "deadline_exceeded") {
+		t.Fatalf("unexpected stderr: %q", stderr.String())
+	}
 }

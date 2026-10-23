@@ -1,7 +1,7 @@
-ok  	example.org/auguard/cmd/au-guard	0.004s
-ok  	example.org/auguard/internal/cli	0.003s
+ok  	example.org/auguard/cmd/au-guard	0.002s
+ok  	example.org/auguard/internal/cli	0.215s
 ok  	example.org/auguard/internal/config	0.003s
-ok  	example.org/auguard/internal/events	0.005s
-ok  	example.org/auguard/internal/pipeline	0.005s
-ok  	example.org/auguard/internal/providers	0.003s
+ok  	example.org/auguard/internal/events	0.003s
+ok  	example.org/auguard/internal/pipeline	0.010s
+ok  	example.org/auguard/internal/providers	0.010s
 ok  	example.org/auguard/internal/tools	0.003s
