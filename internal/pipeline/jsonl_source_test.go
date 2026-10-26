@@ -177,3 +177,42 @@ func TestJSONLSourceCancellation(t *testing.T) {
 		t.Fatalf("got ID %q, want demo_1", got.ID)
 	}
 }
+
+func TestJSONLSourceRejectedCategory(t *testing.T) {
+	input := `{"id":"demo_1","kind":"auth","severity":99,"message":"fixture"}` + "\n"
+
+	source := newJSONLSource(input, 65536, 1000)
+
+	_, err := source.Next(context.Background())
+
+	if !errors.Is(err, pipeline.ErrRejected) {
+		t.Fatalf("want ErrRejected, got %v", err)
+	}
+
+	if !errors.Is(err, events.ErrInvalidEvent) {
+		t.Fatalf("want ErrInvalidEvent, got %v", err)
+	}
+
+	var fieldErr *events.ValidationError
+	if !errors.As(err, &fieldErr) {
+		t.Fatalf("want ValidationError, got %v", err)
+	}
+
+	if fieldErr.Field != "severity" {
+		t.Fatalf("want severity, got %q", fieldErr.Field)
+	}
+}
+
+func TestJSONLSourceMalformedJSONNotRejected(t *testing.T) {
+	source := newJSONLSource("{\"id\":\n", 65536, 1000)
+
+	_, err := source.Next(context.Background())
+
+	if !errors.Is(err, pipeline.ErrInvalidJSONL) {
+		t.Fatalf("want ErrInvalidJSONL, got %v", err)
+	}
+
+	if errors.Is(err, pipeline.ErrRejected) {
+		t.Fatalf("malformed JSON must not be rejected Event: %v", err)
+	}
+}

@@ -14,6 +14,8 @@ import (
 	"example.org/auguard/internal/pipeline"
 )
 
+var errWriteDecision = errors.New("write decision")
+
 func reportError(err error, errOut io.Writer) int {
 	switch {
 	case errors.Is(err, context.Canceled):
@@ -31,6 +33,9 @@ func reportError(err error, errOut io.Writer) int {
 		errors.Is(err, events.ErrInvalidEvent):
 		fmt.Fprintf(errOut, "data_error: %v\n", err)
 		return 3
+	case errors.Is(err, errWriteDecision):
+		fmt.Fprintln(errOut, "infrastructure_error: write_decision")
+		return 4
 
 	default:
 		fmt.Fprintln(errOut, "infrastructure_error: read_event")
@@ -103,28 +108,32 @@ func Run(
 	handler := pipeline.RuleHandler{}
 	encoder := json.NewEncoder(out)
 
-	for {
-		event, err := source.Next(commandCtx)
-
-		if errors.Is(err, io.EOF) {
-			if ctxErr := commandCtx.Err(); ctxErr != nil {
-				return reportError(ctxErr, errOut)
+	stats, err := pipeline.Process(
+		commandCtx,
+		source,
+		handler,
+		cfg.Workers,
+		cfg.Queue,
+		func(decision events.Decision) error {
+			if err := encoder.Encode(decision); err != nil {
+				return fmt.Errorf("%w: %w", errWriteDecision, err)
 			}
-			return 0
-		}
+			return nil
+		},
+	)
 
-		if err != nil {
-			return reportError(err, errOut)
-		}
+	fmt.Fprintf(
+		errOut,
+		"read=%d succeeded=%d rejected=%d failed=%d\n",
+		stats.Read,
+		stats.Succeeded,
+		stats.Rejected,
+		stats.Failed,
+	)
 
-		decision, err := handler.Handle(commandCtx, event)
-		if err != nil {
-			return reportError(err, errOut)
-		}
-
-		if err := encoder.Encode(decision); err != nil {
-			fmt.Fprintln(errOut, "infrastructure_error: write_decision")
-			return 4
-		}
+	if err != nil {
+		return reportError(err, errOut)
 	}
+
+	return 0
 }

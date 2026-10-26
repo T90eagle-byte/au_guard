@@ -1,0 +1,35 @@
+panic: test timed out after 1s
+	running tests:
+		TestProcessTenEvents (1s)
+
+goroutine 5 [running]:
+testing.(*M).startAlarm.func1()
+	/usr/lib/golang/src/testing/testing.go:2802 +0x354
+created by time.goFunc
+	/usr/lib/golang/src/time/sleep.go:215 +0x2d
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0x23710bc7c008, {0x5d2216?, 0x0?}, 0x5dde60)
+	/usr/lib/golang/src/testing/testing.go:2109 +0x4e5
+testing.runTests.func1(0x23710bc7c008)
+	/usr/lib/golang/src/testing/testing.go:2585 +0x3e
+testing.tRunner(0x23710bc7c008, 0x23710bc6dc58)
+	/usr/lib/golang/src/testing/testing.go:2036 +0xea
+testing.runTests({0x5d1b68, 0x13}, {0x5d8277, 0x25}, 0x23710bc30048, {0x748680, 0x17, 0x17}, {0xc2affc37a6b9f164, 0x3b9e664f, ...})
+	/usr/lib/golang/src/testing/testing.go:2583 +0x505
+testing.(*M).Run(0x23710bc22140)
+	/usr/lib/golang/src/testing/testing.go:2443 +0x6ac
+main.main()
+	_testmain.go:92 +0x9b
+
+goroutine 19 [select]:
+example.org/auguard/internal/pipeline.Process({0x5e19a0, 0x76d700}, {0x5e0dc0, 0x23710bc36180}, {0x5e0e20, 0x76d700}, 0x4, 0x2, 0x23710bc1ef10)
+	/home/baranov/go-course/au_guard/internal/pipeline/pool.go:201 +0x83b
+example.org/auguard/internal/pipeline_test.TestProcessTenEvents(0x23710bc7c248)
+	/home/baranov/go-course/au_guard/internal/pipeline/pool_test.go:43 +0x15b
+testing.tRunner(0x23710bc7c248, 0x5dde60)
+	/usr/lib/golang/src/testing/testing.go:2036 +0xea
+created by testing.(*T).Run in goroutine 1
+	/usr/lib/golang/src/testing/testing.go:2101 +0x4c5
+FAIL	example.org/auguard/internal/pipeline	1.016s
+FAIL

@@ -125,7 +125,7 @@ func (s *JSONLSource) Next(ctx context.Context) (events.Event, error) {
 
 	if err := event.Validate(); err != nil {
 		return events.Event{}, fmt.Errorf(
-			"line %d: %w", s.lineNo, err,
+			"line %d: %w: %w", s.lineNo, ErrRejected, err,
 		)
 	}
 

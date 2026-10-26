@@ -68,8 +68,8 @@ func TestCLIValidJSONL(t *testing.T) {
 			if out != decisionOne+decisionTwo {
 				t.Fatalf("unexpected stdout: %q", out)
 			}
-			if errOut != "" {
-				t.Fatalf("stderr must be empty: %q", errOut)
+			if errOut != "read=2 succeeded=2 rejected=0 failed=0\n" {
+				t.Fatalf("unexpected stderr: %q", errOut)
 			}
 		})
 	}
@@ -82,7 +82,8 @@ func TestCLIEmptyInput(t *testing.T) {
 		"",
 	)
 
-	if code != 0 || out != "" || errOut != "" {
+	if code != 0 || out != "" ||
+		errOut != "read=0 succeeded=0 rejected=0 failed=0\n" {
 		t.Fatalf(
 			"code=%d stdout=%q stderr=%q",
 			code, out, errOut,
@@ -153,8 +154,17 @@ func TestCLIPartialOutput(t *testing.T) {
 	if code != 3 {
 		t.Fatalf("exit code = %d, want 3", code)
 	}
-	if out != decisionOne {
-		t.Fatalf("stdout = %q, want first decision", out)
+	if out != "" && out != decisionOne {
+		t.Fatalf("unexpected stdout: %q", out)
+	}
+
+	wantStats := "read=1 succeeded=0 rejected=0 failed=1\n"
+	if out == decisionOne {
+		wantStats = "read=1 succeeded=1 rejected=0 failed=1\n"
+	}
+
+	if !strings.HasPrefix(errOut, wantStats) {
+		t.Fatalf("unexpected statistics: %q", errOut)
 	}
 	if !strings.Contains(errOut, "line 2") {
 		t.Fatalf("stderr must identify line 2: %q", errOut)
@@ -175,7 +185,8 @@ func TestCLILineLimit(t *testing.T) {
 			line+"\n",
 		)
 
-		if code != 0 || out != decisionOne || errOut != "" {
+		if code != 0 || out != decisionOne ||
+			errOut != "read=1 succeeded=1 rejected=0 failed=0\n" {
 			t.Fatalf(
 				"code=%d stdout=%q stderr=%q",
 				code, out, errOut,
@@ -214,8 +225,17 @@ func TestCLIMaxEvents(t *testing.T) {
 	if code != 3 {
 		t.Fatalf("exit code = %d, want 3", code)
 	}
-	if out != decisionOne {
-		t.Fatalf("stdout = %q, want first decision", out)
+	if out != "" && out != decisionOne {
+		t.Fatalf("unexpected stdout: %q", out)
+	}
+
+	wantStats := "read=1 succeeded=0 rejected=0 failed=1\n"
+	if out == decisionOne {
+		wantStats = "read=1 succeeded=1 rejected=0 failed=1\n"
+	}
+
+	if !strings.HasPrefix(errOut, wantStats) {
+		t.Fatalf("unexpected statistics: %q", errOut)
 	}
 	if !strings.Contains(errOut, "too many events") {
 		t.Fatalf("missing event limit error: %q", errOut)
@@ -419,7 +439,8 @@ func TestCLITimeoutFlag(t *testing.T) {
 			"",
 		)
 
-		if code != 0 || out != decisionOne || errOut != "" {
+		if code != 0 || out != decisionOne ||
+			errOut != "read=1 succeeded=1 rejected=0 failed=0\n" {
 			t.Fatalf(
 				"code=%d stdout=%q stderr=%q",
 				code, out, errOut,

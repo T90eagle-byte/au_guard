@@ -1,0 +1,1 @@
+ok  	example.org/auguard/internal/pipeline	1.065s
