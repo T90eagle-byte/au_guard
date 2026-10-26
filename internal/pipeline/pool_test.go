@@ -863,3 +863,251 @@ func TestProcessHandlerFailure(t *testing.T) {
 
 	t.Logf("handler failure: stats=%+v err=%v", stats, err)
 }
+
+type notifiedPoolSource struct {
+	source *measuredSource
+	reads  chan struct{}
+}
+
+func (s *notifiedPoolSource) Next(
+	ctx context.Context,
+) (events.Event, error) {
+	ev, err := s.source.Next(ctx)
+	if err == nil {
+		s.reads <- struct{}{}
+	}
+	return ev, err
+}
+
+func TestProcessSingleWorkerBackpressure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 3*time.Second,
+	)
+	defer cancel()
+
+	source := &notifiedPoolSource{
+		source: &measuredSource{
+			items: makePoolEvents(6),
+		},
+		reads: make(chan struct{}, 6),
+	}
+
+	handler := &holdFirstHandler{
+		firstStarted: make(chan struct{}),
+		releaseFirst: make(chan struct{}),
+		laterDone:    make(chan struct{}, 6),
+	}
+
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			close(handler.releaseFirst)
+		})
+	}
+	defer release()
+
+	type outcome struct {
+		stats pipeline.Stats
+		ids   []string
+		err   error
+	}
+
+	done := make(chan outcome, 1)
+
+	go func() {
+		var ids []string
+
+		stats, err := pipeline.Process(
+			ctx,
+			source,
+			handler,
+			1,
+			1,
+			func(d events.Decision) error {
+				ids = append(ids, d.EventID)
+				return nil
+			},
+		)
+
+		done <- outcome{
+			stats: stats,
+			ids:   ids,
+			err:   err,
+		}
+	}()
+
+	select {
+	case <-handler.firstStarted:
+	case <-ctx.Done():
+		t.Fatal("first worker did not start")
+	}
+
+	// Дожидаемся двух успешных чтений.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-source.reads:
+		case <-ctx.Done():
+			t.Fatal("source did not read two events")
+		}
+	}
+
+	readBefore := source.source.read.Load()
+
+	t.Logf(
+		"before release: workers=1 queue=1 read=%d limit=2",
+		readBefore,
+	)
+
+	if readBefore != 2 {
+		t.Fatalf("read=%d, want 2", readBefore)
+	}
+
+	// Третье чтение до освобождения permit недопустимо.
+	select {
+	case <-source.reads:
+		t.Fatal("source read beyond in-flight limit")
+	default:
+	}
+
+	release()
+
+	var got outcome
+	select {
+	case got = <-done:
+	case <-ctx.Done():
+		t.Fatal("Process did not finish")
+	}
+
+	if got.err != nil {
+		t.Fatalf("Process failed: %v", got.err)
+	}
+
+	if got.stats.Read != 6 ||
+		got.stats.Succeeded != 6 ||
+		got.stats.Failed != 0 ||
+		got.stats.Rejected != 0 ||
+		got.stats.MaxActive != 1 {
+		t.Fatalf("unexpected stats: %+v", got.stats)
+	}
+
+	for i, id := range got.ids {
+		want := fmt.Sprintf("demo_%02d", i)
+		if id != want {
+			t.Fatalf(
+				"position %d: got %q, want %q",
+				i, id, want,
+			)
+		}
+	}
+
+	t.Logf("after release: stats=%+v", got.stats)
+}
+
+type cancelOnEventHandler struct {
+	cancel       context.CancelFunc
+	firstStarted chan struct{}
+	cancelCalled chan struct{}
+	started      atomic.Int64
+	exited       atomic.Int64
+}
+
+func (h *cancelOnEventHandler) Handle(
+	ctx context.Context,
+	e events.Event,
+) (events.Decision, error) {
+	h.started.Add(1)
+	defer h.exited.Add(1)
+
+	switch e.ID {
+	case "demo_00":
+		close(h.firstStarted)
+
+	case "demo_01":
+		select {
+		case <-h.firstStarted:
+		case <-ctx.Done():
+			return events.Decision{}, ctx.Err()
+		}
+
+		// Обработчик demo_01 инициирует отмену.
+		h.cancel()
+		close(h.cancelCalled)
+	}
+
+	<-ctx.Done()
+	return events.Decision{}, ctx.Err()
+}
+
+func TestProcessHandlerInitiatedCancellation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(
+		context.Background(), 3*time.Second,
+	)
+	defer cancel()
+
+	handler := &cancelOnEventHandler{
+		cancel:       cancel,
+		firstStarted: make(chan struct{}),
+		cancelCalled: make(chan struct{}),
+	}
+
+	type outcome struct {
+		stats pipeline.Stats
+		err   error
+	}
+
+	done := make(chan outcome, 1)
+
+	go func() {
+		stats, err := pipeline.Process(
+			ctx,
+			pipeline.NewSliceSource(makePoolEvents(10)),
+			handler,
+			2,
+			1,
+			func(events.Decision) error {
+				return nil
+			},
+		)
+
+		done <- outcome{stats: stats, err: err}
+	}()
+
+	select {
+	case <-handler.cancelCalled:
+	case <-ctx.Done():
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			t.Fatal("handler did not initiate cancellation")
+		}
+	}
+
+	var got outcome
+	select {
+	case got = <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Process did not finish after cancellation")
+	}
+
+	if !errors.Is(got.err, context.Canceled) {
+		t.Fatalf("want context.Canceled, got %v", got.err)
+	}
+
+	started := handler.started.Load()
+	exited := handler.exited.Load()
+
+	if started < 2 || started != exited {
+		t.Fatalf(
+			"handler calls not completed: started=%d exited=%d",
+			started, exited,
+		)
+	}
+
+	if got.stats.Failed != 0 ||
+		got.stats.Succeeded != 0 {
+		t.Fatalf("unexpected stats: %+v", got.stats)
+	}
+
+	t.Logf(
+		"handler cancellation: started=%d exited=%d stats=%+v",
+		started, exited, got.stats,
+	)
+}
