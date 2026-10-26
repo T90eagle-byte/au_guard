@@ -1,0 +1,41 @@
+panic: test timed out after 2s
+	running tests:
+		TestPoolCancellationDeadline (2s)
+
+goroutine 6 [running]:
+testing.(*M).startAlarm.func1()
+	/usr/lib/golang/src/testing/testing.go:2802 +0x354
+created by time.goFunc
+	/usr/lib/golang/src/time/sleep.go:215 +0x2d
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0x349791866008, {0x5d77be?, 0x0?}, 0x5e0a18)
+	/usr/lib/golang/src/testing/testing.go:2109 +0x4e5
+testing.runTests.func1(0x349791866008)
+	/usr/lib/golang/src/testing/testing.go:2585 +0x3e
+testing.tRunner(0x349791866008, 0x34979185bc58)
+	/usr/lib/golang/src/testing/testing.go:2036 +0xea
+testing.runTests({0x5d4527, 0x13}, {0x5dad41, 0x25}, 0x349791822048, {0x74c680, 0x1a, 0x1a}, {0xc2b00d9eab763892, 0x7738f917, ...})
+	/usr/lib/golang/src/testing/testing.go:2583 +0x505
+testing.(*M).Run(0x349791814140)
+	/usr/lib/golang/src/testing/testing.go:2443 +0x6ac
+main.main()
+	_testmain.go:98 +0x9b
+
+goroutine 19 [select]:
+example.org/auguard/internal/pipeline_test.TestPoolCancellationDeadline(0x349791866248)
+	/home/baranov/go-course/au_guard/internal/pipeline/pool_test.go:1162 +0x2d6
+testing.tRunner(0x349791866248, 0x5e0a18)
+	/usr/lib/golang/src/testing/testing.go:2036 +0xea
+created by testing.(*T).Run in goroutine 1
+	/usr/lib/golang/src/testing/testing.go:2101 +0x4c5
+
+goroutine 20 [select]:
+example.org/auguard/internal/pipeline.Process({0x5e47b0, 0x34979184a2a0}, {0x5e3a40, 0x3497918261c0}, {0x5e3a60, 0x34979181c360}, 0x2, 0x1, 0x5e0b50)
+	/home/baranov/go-course/au_guard/internal/pipeline/pool.go:201 +0x83b
+example.org/auguard/internal/pipeline_test.TestPoolCancellationDeadline.func1()
+	/home/baranov/go-course/au_guard/internal/pipeline/pool_test.go:1134 +0x154
+created by example.org/auguard/internal/pipeline_test.TestPoolCancellationDeadline in goroutine 19
+	/home/baranov/go-course/au_guard/internal/pipeline/pool_test.go:1133 +0x146
+FAIL	example.org/auguard/internal/pipeline	2.009s
+FAIL

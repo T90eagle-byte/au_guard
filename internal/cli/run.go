@@ -132,7 +132,14 @@ func Run(
 	)
 
 	if err != nil {
+		if ctxErr := commandCtx.Err(); ctxErr != nil {
+			return reportError(ctxErr, errOut)
+		}
 		return reportError(err, errOut)
+	}
+
+	if ctxErr := commandCtx.Err(); ctxErr != nil {
+		return reportError(ctxErr, errOut)
 	}
 
 	return 0

@@ -1111,3 +1111,304 @@ func TestProcessHandlerInitiatedCancellation(t *testing.T) {
 		started, exited, got.stats,
 	)
 }
+
+func TestPoolCancellationDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		100*time.Millisecond,
+	)
+	defer cancel()
+
+	handler := &cancelWaitingHandler{
+		started: make(chan struct{}, 2),
+	}
+
+	type outcome struct {
+		stats pipeline.Stats
+		err   error
+	}
+
+	done := make(chan outcome, 1)
+
+	go func() {
+		stats, err := pipeline.Process(
+			ctx,
+			pipeline.NewSliceSource(makePoolEvents(20)),
+			handler,
+			2,
+			1,
+			func(events.Decision) error {
+				return nil
+			},
+		)
+
+		done <- outcome{stats: stats, err: err}
+	}()
+
+	// Подтверждаем запуск обоих работников.
+	for i := 0; i < 2; i++ {
+		select {
+		case <-handler.started:
+		case <-ctx.Done():
+			t.Fatalf(
+				"workers did not start: %v",
+				ctx.Err(),
+			)
+		}
+	}
+
+	var got outcome
+
+	select {
+	case got = <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("Process did not finish after deadline")
+	}
+
+	if !errors.Is(got.err, context.DeadlineExceeded) {
+		t.Fatalf(
+			"want DeadlineExceeded, got %v",
+			got.err,
+		)
+	}
+
+	if handler.exited.Load() != 2 {
+		t.Fatalf(
+			"exited=%d, want 2",
+			handler.exited.Load(),
+		)
+	}
+
+	if got.stats.Failed != 0 ||
+		got.stats.Succeeded != 0 {
+		t.Fatalf("unexpected stats: %+v", got.stats)
+	}
+
+	t.Logf(
+		"deadline: exited=%d stats=%+v err=%v",
+		handler.exited.Load(),
+		got.stats,
+		got.err,
+	)
+}
+
+type cleanupHandler struct {
+	started chan struct{}
+	exited  chan struct{}
+}
+
+func (h *cleanupHandler) Handle(
+	ctx context.Context,
+	e events.Event,
+) (events.Decision, error) {
+	close(h.started)
+	defer close(h.exited)
+
+	<-ctx.Done()
+	return events.Decision{}, ctx.Err()
+}
+
+func TestPoolCancellationCleanup(t *testing.T) {
+	const runs = 100
+
+	// Часть 1. Сто запусков с заранее отменённым контекстом.
+	for i := 0; i < runs; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		source := &measuredSource{
+			items: makePoolEvents(3),
+		}
+
+		emitted := 0
+
+		stats, err := pipeline.Process(
+			ctx,
+			source,
+			pipeline.RuleHandler{},
+			2,
+			1,
+			func(events.Decision) error {
+				emitted++
+				return nil
+			},
+		)
+
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("run %d: unexpected error: %v", i, err)
+		}
+
+		if source.read.Load() != 0 || emitted != 0 {
+			t.Fatalf("run %d: work after cancellation", i)
+		}
+
+		if stats != (pipeline.Stats{}) {
+			t.Fatalf("run %d: unexpected stats: %+v", i, stats)
+		}
+	}
+
+	t.Logf("pre-canceled runs=%d: PASS, no events read", runs)
+
+	// Часть 2. Проверяем завершение уже запущенного worker.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	handler := &cleanupHandler{
+		started: make(chan struct{}),
+		exited:  make(chan struct{}),
+	}
+
+	processDone := make(chan error, 1)
+
+	go func() {
+		_, err := pipeline.Process(
+			ctx,
+			pipeline.NewSliceSource(makePoolEvents(1)),
+			handler,
+			1,
+			1,
+			func(events.Decision) error {
+				return nil
+			},
+		)
+
+		processDone <- err
+	}()
+
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+
+	select {
+	case <-handler.started:
+	case <-timer.C:
+		cancel()
+		t.Fatal("worker did not start")
+	}
+
+	cancel()
+
+	select {
+	case err := <-processDone:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+	case <-timer.C:
+		t.Fatal("Process did not finish after cancellation")
+	}
+
+	// Process уже вернулся. Worker к этому моменту обязан выйти.
+	select {
+	case <-handler.exited:
+		t.Log("active worker exited before Process returned")
+	default:
+		t.Fatal("Process returned before worker exited")
+	}
+}
+
+type eightWorkerGate struct {
+	entered atomic.Int64
+	release chan struct{}
+}
+
+func (h *eightWorkerGate) Handle(
+	ctx context.Context,
+	e events.Event,
+) (events.Decision, error) {
+	n := h.entered.Add(1)
+
+	// Первые восемь обработчиков должны
+	// одновременно войти в Handle.
+	if n <= 8 {
+		if n == 8 {
+			close(h.release)
+		}
+
+		select {
+		case <-h.release:
+		case <-ctx.Done():
+			return events.Decision{}, ctx.Err()
+		}
+	}
+
+	return pipeline.RuleHandler{}.Handle(ctx, e)
+}
+
+func TestPoolStress500(t *testing.T) {
+	ctx, cancel := context.WithTimeout(
+		context.Background(),
+		5*time.Second,
+	)
+	defer cancel()
+
+	const workers = 8
+	const queue = 1
+	const total = 500
+
+	input := makePoolEvents(total)
+	source := pipeline.NewSliceSource(input)
+
+	handler := &eightWorkerGate{
+		release: make(chan struct{}),
+	}
+
+	var decisions []events.Decision
+
+	stats, err := pipeline.Process(
+		ctx,
+		source,
+		handler,
+		workers,
+		queue,
+		func(d events.Decision) error {
+			decisions = append(decisions, d)
+			return nil
+		},
+	)
+
+	if err != nil {
+		t.Fatalf("Process failed: %v", err)
+	}
+
+	if stats.Read != total ||
+		stats.Succeeded != total ||
+		stats.Rejected != 0 ||
+		stats.Failed != 0 {
+		t.Fatalf("unexpected stats: %+v", stats)
+	}
+
+	if len(decisions) != total {
+		t.Fatalf(
+			"decisions=%d, want %d",
+			len(decisions),
+			total,
+		)
+	}
+
+	for i, d := range decisions {
+		if d.EventID != input[i].ID {
+			t.Fatalf(
+				"position %d: got %q, want %q",
+				i, d.EventID, input[i].ID,
+			)
+		}
+	}
+
+	if stats.MaxActive != workers {
+		t.Fatalf(
+			"MaxActive=%d, want %d",
+			stats.MaxActive,
+			workers,
+		)
+	}
+
+	t.Logf(
+		"workers=%d queue=%d events=%d read=%d succeeded=%d MaxActive=%d",
+		workers,
+		queue,
+		total,
+		stats.Read,
+		stats.Succeeded,
+		stats.MaxActive,
+	)
+}

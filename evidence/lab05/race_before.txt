@@ -1,0 +1,50 @@
+==================
+WARNING: DATA RACE
+Read at 0x00c000018da0 by goroutine 18:
+  example.org/auguard/internal/pipeline.Process.func3()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool.go:168 +0x2f0
+
+Previous write at 0x00c000018da0 by goroutine 19:
+  example.org/auguard/internal/pipeline.Process.func3()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool.go:168 +0x308
+
+Goroutine 18 (running) created at:
+  example.org/auguard/internal/pipeline.Process()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool.go:142 +0xa84
+  example.org/auguard/internal/pipeline_test.TestProcessPreservesOrder.func2()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool_test.go:152 +0x20e
+
+Goroutine 19 (running) created at:
+  example.org/auguard/internal/pipeline.Process()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool.go:142 +0xa84
+  example.org/auguard/internal/pipeline_test.TestProcessPreservesOrder.func2()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool_test.go:152 +0x20e
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c000018da0 by goroutine 18:
+  example.org/auguard/internal/pipeline.Process.func3()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool.go:168 +0x308
+
+Previous write at 0x00c000018da0 by goroutine 20:
+  example.org/auguard/internal/pipeline.Process.func3()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool.go:168 +0x308
+
+Goroutine 18 (running) created at:
+  example.org/auguard/internal/pipeline.Process()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool.go:142 +0xa84
+  example.org/auguard/internal/pipeline_test.TestProcessPreservesOrder.func2()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool_test.go:152 +0x20e
+
+Goroutine 20 (running) created at:
+  example.org/auguard/internal/pipeline.Process()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool.go:142 +0xa84
+  example.org/auguard/internal/pipeline_test.TestProcessPreservesOrder.func2()
+      /home/baranov/go-course/au_guard/internal/pipeline/pool_test.go:152 +0x20e
+==================
+--- FAIL: TestProcessPreservesOrder (0.00s)
+    pool_test.go:221: ordered 6 decisions: {Read:6 Succeeded:6 Rejected:0 Failed:0 MaxActive:3}
+    testing.go:1712: race detected during execution of test
+FAIL
+FAIL	example.org/auguard/internal/pipeline	0.036s
+FAIL
