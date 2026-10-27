@@ -1,0 +1,15 @@
+ok  	example.org/auguard/cmd/au-guard	0.086s
+ok  	example.org/auguard/internal/cli	0.217s
+ok  	example.org/auguard/internal/config	0.004s
+ok  	example.org/auguard/internal/events	0.003s
+ok  	example.org/auguard/internal/pipeline	0.110s
+ok  	example.org/auguard/internal/providers	0.003s
+ok  	example.org/auguard/internal/tools	0.007s
+=== Race Detector: all packages ===
+ok  	example.org/auguard/cmd/au-guard	1.075s
+ok  	example.org/auguard/internal/cli	1.260s
+ok  	example.org/auguard/internal/config	1.018s
+ok  	example.org/auguard/internal/events	1.019s
+ok  	example.org/auguard/internal/pipeline	1.702s
+ok  	example.org/auguard/internal/providers	1.310s
+ok  	example.org/auguard/internal/tools	1.106s
