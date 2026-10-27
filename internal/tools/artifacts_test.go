@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -405,4 +406,150 @@ func TestArtifactReaderNegativeExperiment(t *testing.T) {
 	t.Log(
 		"outside_content_not_read=true",
 	)
+}
+
+func TestArtifactOpenRegular(t *testing.T) {
+	reader, outsidePath := newLinkFixtureReader(t)
+
+	rootPath := filepath.Join(
+		filepath.Dir(outsidePath),
+		"artifacts",
+	)
+
+	if err := os.Mkdir(
+		filepath.Join(rootPath, "nested"), 0700,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(
+		filepath.Join(rootPath, "nested", "beta.txt"),
+		[]byte("lab06 fixture beta\n"),
+		0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(
+		filepath.Join(rootPath, "exact.bin"),
+		bytes.Repeat([]byte("A"), 65536),
+		0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(
+		filepath.Join(rootPath, "oversize.bin"),
+		bytes.Repeat([]byte("B"), 65537),
+		0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Mkdir(
+		filepath.Join(rootPath, "directory"), 0700,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := syscall.Mkfifo(
+		filepath.Join(rootPath, "blocked.fifo"), 0600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+
+	allowed := []struct {
+		name string
+		size int64
+	}{
+		{"alpha.txt", 20},
+		{"nested/beta.txt", 19},
+		{"inside-link.txt", 20},
+		{"exact.bin", 65536},
+	}
+
+	for _, tt := range allowed {
+		f, size, err := reader.OpenRegular(ctx, tt.name)
+		if err != nil {
+			t.Fatalf("open %s: %v", tt.name, err)
+		}
+
+		data, readErr := io.ReadAll(f)
+		closeErr := f.Close()
+
+		if readErr != nil || closeErr != nil {
+			t.Fatalf(
+				"read/close %s: %v / %v",
+				tt.name, readErr, closeErr,
+			)
+		}
+
+		if size != tt.size ||
+			int64(len(data)) != tt.size {
+			t.Fatalf(
+				"%s: reported=%d actual=%d expected=%d",
+				tt.name, size, len(data), tt.size,
+			)
+		}
+
+		t.Logf(
+			"ALLOW %s: descriptor_opened=true bytes=%d",
+			tt.name, size,
+		)
+	}
+
+	denied := []struct {
+		name string
+		want error
+	}{
+		{"../outside.txt", tools.ErrInvalidArtifactName},
+		{outsidePath, tools.ErrInvalidArtifactName},
+		{"escape-link.txt", tools.ErrArtifactUnavailable},
+		{"directory", tools.ErrNotRegular},
+		{"blocked.fifo", tools.ErrNotRegular},
+		{"oversize.bin", tools.ErrArtifactTooLarge},
+	}
+
+	for _, tt := range denied {
+		start := time.Now()
+
+		f, _, err := reader.OpenRegular(ctx, tt.name)
+		elapsed := time.Since(start)
+
+		if f != nil {
+			_ = f.Close()
+			t.Fatalf("%s: unexpected open descriptor", tt.name)
+		}
+
+		if !errors.Is(err, tt.want) {
+			t.Fatalf(
+				"%s: expected %v, got %v",
+				tt.name, tt.want, err,
+			)
+		}
+
+		if elapsed > time.Second {
+			t.Fatalf("%s: slow rejection: %s", tt.name, elapsed)
+		}
+
+		t.Logf(
+			"DENY %s: error=%v descriptor=nil",
+			tt.name, err,
+		)
+	}
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+
+	f, _, err := reader.OpenRegular(canceled, "alpha.txt")
+	if f != nil || !errors.Is(err, context.Canceled) {
+		if f != nil {
+			_ = f.Close()
+		}
+		t.Fatalf("canceled context: file=%v err=%v", f, err)
+	}
+
+	t.Log("DENY canceled_context: descriptor=nil")
 }

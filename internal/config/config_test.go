@@ -46,6 +46,19 @@ func TestConfigBounds(t *testing.T) {
 		{"timeout_max", func(c *config.Config) { c.Timeout = 30 * time.Second }, true},
 		{"timeout_below", func(c *config.Config) { c.Timeout = 99 * time.Millisecond }, false},
 		{"timeout_above", func(c *config.Config) { c.Timeout = 30*time.Second + time.Nanosecond }, false},
+
+		{"hash_timeout_min", func(c *config.Config) {
+			c.HashTimeout = time.Millisecond
+		}, true},
+		{"hash_timeout_max", func(c *config.Config) {
+			c.HashTimeout = 2 * time.Second
+		}, true},
+		{"hash_timeout_zero", func(c *config.Config) {
+			c.HashTimeout = 0
+		}, false},
+		{"hash_timeout_above", func(c *config.Config) {
+			c.HashTimeout = 2*time.Second + time.Nanosecond
+		}, false},
 	}
 
 	for _, tt := range tests {

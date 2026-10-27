@@ -14,6 +14,7 @@ type Config struct {
 	MaxLineBytes int
 	MaxEvents    int
 	Timeout      time.Duration
+	HashTimeout  time.Duration
 }
 
 func Default() Config {
@@ -23,6 +24,7 @@ func Default() Config {
 		MaxLineBytes: 65536,
 		MaxEvents:    1000,
 		Timeout:      5 * time.Second,
+		HashTimeout:  2 * time.Second,
 	}
 }
 
@@ -45,6 +47,9 @@ func (c Config) Validate() error {
 
 	if c.Timeout < 100*time.Millisecond || c.Timeout > 30*time.Second {
 		return fmt.Errorf("config timeout: %w", ErrInvalidConfig)
+	}
+	if c.HashTimeout <= 0 || c.HashTimeout > 2*time.Second {
+		return fmt.Errorf("config hash_timeout: %w", ErrInvalidConfig)
 	}
 
 	return nil

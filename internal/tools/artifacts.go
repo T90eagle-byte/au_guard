@@ -71,16 +71,16 @@ func validateArtifactName(name string) error {
 	return nil
 }
 
-func (r *ArtifactReader) Read(
+func (r *ArtifactReader) OpenRegular(
 	ctx context.Context,
 	name string,
-) ([]byte, error) {
+) (*os.File, int64, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if err := validateArtifactName(name); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	f, err := r.root.OpenFile(
@@ -89,26 +89,47 @@ func (r *ArtifactReader) Read(
 		0,
 	)
 	if err != nil {
-		return nil, ErrArtifactUnavailable
+		return nil, 0, ErrArtifactUnavailable
 	}
-	defer f.Close()
 
 	info, err := f.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("stat artifact: %w", err)
+		_ = f.Close()
+		return nil, 0, fmt.Errorf("stat artifact: %w", err)
 	}
 
 	if !info.Mode().IsRegular() {
-		return nil, ErrNotRegular
+		_ = f.Close()
+		return nil, 0, ErrNotRegular
 	}
 
 	if info.Size() < 0 {
-		return nil, ErrInvalidArtifactSize
+		_ = f.Close()
+		return nil, 0, ErrInvalidArtifactSize
 	}
 
 	if info.Size() > r.maxBytes {
-		return nil, ErrArtifactTooLarge
+		_ = f.Close()
+		return nil, 0, ErrArtifactTooLarge
 	}
+
+	if err := ctx.Err(); err != nil {
+		_ = f.Close()
+		return nil, 0, err
+	}
+
+	return f, info.Size(), nil
+}
+
+func (r *ArtifactReader) Read(
+	ctx context.Context,
+	name string,
+) ([]byte, error) {
+	f, _, err := r.OpenRegular(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
 
 	data, err := io.ReadAll(
 		io.LimitReader(f, r.maxBytes+1),
