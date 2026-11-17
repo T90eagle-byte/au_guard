@@ -248,7 +248,7 @@ func TestCLIArgumentErrors(t *testing.T) {
 		args []string
 	}{
 		{"no_command", nil},
-		{"unknown_command", []string{"serve"}},
+		{"unknown_command", []string{"unknown"}},
 		{"unknown_flag", []string{"ingest", "--unknown"}},
 		{"missing_value", []string{"ingest", "--workers"}},
 		{"invalid_number", []string{"ingest", "--workers", "abc"}},

@@ -49,6 +49,9 @@ func Run(
 	in io.Reader,
 	out, errOut io.Writer,
 ) int {
+	if len(args) > 0 && args[0] == "serve" {
+		return runServe(ctx, args[1:], out, errOut)
+	}
 	if len(args) == 0 || args[0] != "ingest" {
 		fmt.Fprintln(errOut, "argument_error: expected ingest")
 		return 2
