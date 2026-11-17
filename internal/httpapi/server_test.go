@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -206,6 +207,47 @@ func TestDecodeEventLimits(t *testing.T) {
 	}
 }
 
+func TestRateLimitConcurrent(t *testing.T) {
+	s, _, _ := setup()
+	s.Logger = slog.New(slog.NewTextHandler(ioDiscard{}, nil))
+	s.RateLimit = 7
+	s.RateWindow = time.Hour
+	h := s.Handler()
+	var wg sync.WaitGroup
+	var accepted, rejected atomic.Int32
+	for n := 0; n < 50; n++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w := request(h, "GET", "/healthz", "", "")
+			switch w.Code {
+			case 200:
+				accepted.Add(1)
+			case 429:
+				if !strings.Contains(w.Body.String(), "rate_limited") {
+					t.Error("нет кода ошибки")
+				}
+				rejected.Add(1)
+			default:
+				t.Errorf("статус %d", w.Code)
+			}
+		}()
+	}
+	wg.Wait()
+	if accepted.Load() != 7 || rejected.Load() != 43 {
+		t.Fatalf("допущено=%d отклонено=%d", accepted.Load(), rejected.Load())
+	}
+	t.Logf("Разрешено: %d; отклонено: %d", accepted.Load(), rejected.Load())
+}
+
 type ioDiscard struct{}
 
 func (ioDiscard) Write(p []byte) (int, error) { return len(p), nil }
+
+func TestRateWindowRestarts(t *testing.T) {
+	l := &limiter{limit: 1, window: time.Second, start: time.Now().Add(-2 * time.Second), count: 1}
+	h := l.wrap(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))
+	if w := request(h, "GET", "/", "", ""); w.Code != 204 {
+		t.Fatalf("status=%d", w.Code)
+	}
+}

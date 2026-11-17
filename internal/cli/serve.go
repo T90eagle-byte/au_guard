@@ -36,7 +36,9 @@ func runServe(ctx context.Context, args []string, out, errOut io.Writer) int {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	addr := fs.String("addr", "127.0.0.1:8080", "адрес сервера")
-	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
+	limit := fs.Int("rate-limit", 100, "число запросов за интервал")
+	window := fs.Duration("rate-window", time.Second, "интервал ограничения")
+	if err := fs.Parse(args); err != nil || fs.NArg() != 0 || *limit < 1 || *window <= 0 {
 		fmt.Fprintln(errOut, "Ошибка параметров сервера")
 		return 2
 	}
@@ -47,7 +49,7 @@ func runServe(ctx context.Context, args []string, out, errOut io.Writer) int {
 		return 2
 	}
 	core := &apiCore{handler: pipeline.RuleHandler{}}
-	api := &httpapi.Server{Ingestor: core, Readiness: core, Logger: slog.New(slog.NewJSONHandler(errOut, nil))}
+	api := &httpapi.Server{Ingestor: core, Readiness: core, Logger: slog.New(slog.NewJSONHandler(errOut, nil)), RateLimit: *limit, RateWindow: *window}
 	srv := &http.Server{Addr: *addr, Handler: api.Handler(), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10, BaseContext: func(net.Listener) context.Context { return ctx }}
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {

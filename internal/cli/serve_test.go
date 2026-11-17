@@ -11,7 +11,7 @@ import (
 )
 
 func TestServeRejectsExternalAddressAndBadConfig(t *testing.T) {
-	for _, args := range [][]string{{"--addr", "0.0.0.0:8080"}, {"--addr", "localhost:8080"}, {"--addr", "127.0.0.1:0"}} {
+	for _, args := range [][]string{{"--addr", "0.0.0.0:8080"}, {"--addr", "localhost:8080"}, {"--addr", "127.0.0.1:0"}, {"--rate-limit", "0"}, {"--rate-window", "0s"}} {
 		var out, errOut bytes.Buffer
 		if code := runServe(context.Background(), args, &out, &errOut); code != 2 {
 			t.Fatalf("%v: код %d", args, code)

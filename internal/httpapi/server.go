@@ -12,6 +12,7 @@ import (
 	"mime"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"example.org/auguard/internal/events"
@@ -28,6 +29,9 @@ type Server struct {
 	Ingestor  Ingestor
 	Readiness Readiness
 	Logger    *slog.Logger
+	// Нулевое значение отключает ограничение; CLI задаёт явные значения.
+	RateLimit  int
+	RateWindow time.Duration
 }
 
 var (
@@ -85,6 +89,9 @@ func (s *Server) Handler() http.Handler {
 	register("/v1/events", "POST", s.ingest)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { problem(w, 404, "not_found") })
 	var handler http.Handler = mux
+	if s.RateLimit > 0 && s.RateWindow > 0 {
+		handler = (&limiter{limit: s.RateLimit, window: s.RateWindow}).wrap(handler)
+	}
 	logger := s.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -201,5 +208,35 @@ func withRequestIDSource(next http.Handler, logger *slog.Logger, random func([]b
 			route = r.URL.Path
 		}
 		logger.Info("HTTP-запрос", "request_id", id, "route", route, "status", sw.status, "duration_ms", time.Since(start).Milliseconds())
+	})
+}
+
+// Ограничение общее для процесса и не хранит адреса клиентов.
+type limiter struct {
+	mu     sync.Mutex
+	limit  int
+	window time.Duration
+	start  time.Time
+	count  int
+}
+
+func (l *limiter) wrap(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		l.mu.Lock()
+		now := time.Now()
+		if l.start.IsZero() || now.Sub(l.start) >= l.window {
+			l.start = now
+			l.count = 0
+		}
+		allowed := l.count < l.limit
+		if allowed {
+			l.count++
+		}
+		l.mu.Unlock()
+		if !allowed {
+			problem(w, 429, "rate_limited")
+			return
+		}
+		next.ServeHTTP(w, r)
 	})
 }
